@@ -1,0 +1,526 @@
+---
+title: "Figure 2 Associations between strain-level variation in R. solanacearum and resident microbiome responses."
+author: "Yarong Li & Ningqi Wang"
+date: "2026-10-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Clean workspace
+rm(list=ls()) 
+# Set output directory
+output_dir="./"
+```
+
+## A. Phylogenetic tree
+
+(A) phylogenetic relationships among 30 R. solanacearum strains based on egl gene sequences.
+
+```{r tree}
+library(ape)
+library(ggtree)
+library(ggplot2)
+rs_rgl <- read.tree("egl.nwk")
+rs_rgl$edge.length[rs_rgl$edge.length < 0] <- 0
+replacements <- c(
+  "GMI1000" = "*GMI1000",
+  "PSS81" = "*PSS81", 
+  "Tb43" = "*Tb43",
+  "MAD17" = "*MAD17",
+  "CMR121" = "*CMR121",
+  "UW551" = "*UW551",
+  "CMR66" = "*CMR66",
+  "CFBP3059" = "*CFBP3059",
+  "Psi7" = "*Psi7",
+  "ACH732" = "*ACH732"
+)
+
+for(old_name in names(replacements)) {
+  rs_rgl$tip.label[rs_rgl$tip.label == old_name] <- replacements[old_name]
+}
+
+fig2a <- ggtree(rs_rgl, layout="equal_angle",size=0.3, branch.length = 'none')+
+  geom_tiplab(aes(color = grepl("^\\*", label)), size = 2, offset = 0.3) +  
+  scale_color_manual(values = c("black", "red")) +  
+  theme(legend.position = "none")
+ggsave(paste0(output_dir, "fig2A.pdf", sep=""), fig2a, width = 5, height = 5)
+fig2a
+```
+
+
+
+## B. pca
+
+(B) Principal component analysis (PCA) of response and resource-utilization traits of R. solanacearum. 
+
+```{r pca}
+library(FactoMineR)
+library(magrittr)
+library(dplyr)
+library(factoextra)
+library(ggplot2)
+library(vegan)
+
+phy_metafile <- read.delim("../data/phy_metafile.txt")
+trait_data <- read.delim("../data/trait_data.txt")
+res.pca <- PCA(trait_data[,1:51], 
+               scale.unit = F,ncp = 11, quanti.sup = NULL, quali.sup = NULL, 
+               row.w = NULL, col.w = NULL, graph = FALSE)
+
+sam=data.frame(res.pca$ind$coord) %>% .[1:2] %>% data.frame(.,phy_metafile)
+cent = aggregate(sam[, 1:2], by = list(sam$cluster),FUN = mean)
+colnames(cent) = c("Cluster", "cent1", "cent2")
+PCAframe = left_join(data.frame(sam, joint = sam$cluster), 
+                     data.frame(cent[, 2:3], joint = cent$Cluster)) %>% suppressMessages()
+PCAframe = PCAframe[, -which(colnames(PCAframe) == "joint")]
+
+adonis2(trait_data[,1:51]~phy_metafile$cluster,method="euclidean")
+
+fig2b <- ggplot(PCAframe)+
+  geom_hline(yintercept=0,linetype=2,color="#666666") +
+  geom_vline(xintercept=0,linetype=2,color="#666666") +
+  geom_segment(aes(x=Dim.1,y=Dim.2,xend = cent1, yend = cent2,color=cluster),show.legend = FALSE, size = 0.3, alpha = 0.6)+
+  geom_point(data = cent,aes(x=cent1,y=cent2,color=factor(Cluster)),size=2,alpha=.8)+
+  geom_point(size=1,alpha=.5,aes(x=Dim.1,y=Dim.2,color=factor(cluster)))+
+  scale_color_manual(values = c("#ef1828","#ffbc14",
+                                "#00bdcd","#006b7b"))+
+  scale_fill_manual(values = c("#ef1828","#ffbc14",
+                               "#00bdcd","#006b7b"))+
+  annotate("text",x = 1, y = 1,label = "atop(R^2 == 0.35, italic(p) < 0.001)",
+           parse = TRUE,size = 2.5)+
+  labs(x=paste0("PC1 (",get_eigenvalue(res.pca) %>% .[1,2]%>% round(.,2),"%)"),
+       y=paste0("PC2 (",get_eigenvalue(res.pca) %>% .[2,2]%>% round(.,2),"%)"),
+       fill="Cluster",color="Cluster")+
+  theme_minimal()+
+  theme(axis.title = element_text(size = 7,face = "bold"),
+        axis.text = element_text(size = 6,color="black"),
+        legend.text = element_text(size = 6,color="black"),
+        legend.title = element_text(size = 7,face = "bold"),
+        legend.key.size = unit(0.4, 'cm'),
+        legend.position = "bottom")
+
+ggsave(paste0(output_dir, "fig2B.pdf", sep=""), fig2b, width = 5, height = 5)
+fig2b
+```
+
+
+
+## C. pcoa
+
+(C) Principal coordinates analysis (PCoA) of bacterial communities following inoculation with different strains.
+
+```{r pcoa}
+library(ggplot2)
+library(LorMe)
+
+groupfile <- read.delim("../data/groupfile.txt")
+asv_table <- read.delim("../data/asv_table.txt")
+asv_taxonomy <- read.delim("../data/asv_taxonomy.txt")
+
+asv_object <- tax_summary(groupfile = groupfile,
+                          inputtable = asv_table[,-1],reads = T,
+                          taxonomytable = asv_taxonomy,
+                          outputtax = "standard")
+asv_object2 <- object_config(taxobj =asv_object,
+                             treat_location = 8,
+                             rep_location = 5,
+                             treat_col = c("gray","#ef1828","#ffbc14",
+                                           "#00bdcd","#006b7b"))
+
+all_structure=structure_plot(taxobj =asv_object2,taxlevel = "Genus")
+pcoa_coord=all_structure$PCoA_coordinates
+
+set.seed(999)
+adonis2(t(asv_object2$Genus[,-1])~cluster,data=asv_object2$groupfile)
+
+fig2c <- ggplot(pcoa_coord)+
+  geom_hline(yintercept=0,linetype=2,color="#666666") +
+  geom_vline(xintercept=0,linetype=2,color="#666666")+
+  geom_point(aes(x=`PCOA1(58.4%)`,y=`PCOA2(6.6%)`,color=cluster,shape=cluster),fill="gray",size=1)+
+  scale_color_manual(values = c("black","#ef1828","#ffbc14","#00bdcd","#006b7b"))+
+  scale_shape_manual(values = c(24,20,20,20,20,20))+
+  labs(x="PCoA 1 (58.4%)",y="PCoA 2 (6.6%)")+
+  annotate("text",x = 0.2, y = -0.18,label = "R^2 == 0.32 * ',' ~~ italic(p) < 0.001",parse = TRUE,size = 3) +
+  theme_minimal()+
+  theme(axis.title = element_text(size = 7,face = "bold"),
+        axis.text = element_text(size = 6,color="black"),
+        legend.text = element_text(size = 6,color="black"),
+        legend.title = element_text(size = 6,face = "bold"),
+        legend.key.size = unit(0.4, 'cm'),
+  )
+ggsave(paste0(output_dir, "fig2C.pdf", sep=""), fig2c, width = 5, height = 4)
+fig2c
+```
+
+
+
+## D. VPA
+
+(D) Variation partitioning analysis (VPA) showing the proportion of community variation explained by response and resource-utilization traits.
+
+```{r VPA}
+library(ggplot2)
+library(LorMe)
+library(magrittr)
+library(dplyr)
+library(vegan)
+library(ggforce)
+
+groupfile <- read.delim("../data/groupfile.txt")
+asv_table <- read.delim("../data/asv_table.txt")
+asv_taxonomy <- read.delim("../data/asv_taxonomy.txt")
+trait_data <- read.delim("../data/trait_data.txt")
+
+asv_object <- tax_summary(groupfile = groupfile,
+                          inputtable = asv_table[,-1],reads = T,
+                          taxonomytable = asv_taxonomy,
+                          outputtax = "standard")
+asv_object2 <- object_config(taxobj =asv_object,
+                             treat_location = 8,
+                             rep_location = 5,
+                             treat_col = c("gray","#ef1828","#ffbc14",
+                                           "#00bdcd","#006b7b"))
+
+rda_asv <- data.frame(asv_object2$Genus[,-1],row.names = asv_object2$Genus_taxonomy$GenusID) %>% 
+  .[,-c(7:14)] #remove CK
+rda_env=data.frame(ID=colnames(rda_asv),sampleID=asv_object2$groupfile$strain[-c(7:14)]) %>% 
+  left_join(.,trait_data)
+rownames(rda_env)=rda_env$ID
+rda_env=rda_env[,-c(1:2,54)]
+env_anno=data.frame(name=colnames(rda_env[,1:51]),ID=paste0("Env",1:51))
+colnames(rda_env)=paste0("Env",1:51)
+
+#RDA
+rda_result_resource=tbRDA_analysis(otudata = rda_asv,envdata = rda_env[,11:51],collinearity = T,perm.test = F)
+rda_env1<-as.data.frame(rda_result_resource$rdascores$biplot)
+rda_env1$ID=rownames(rda_env1)
+rda_env1=left_join(rda_env1,env_anno)
+
+rda_result_env=tbRDA_analysis(otudata = rda_asv,envdata = rda_env[,1:10],collinearity = T,perm.test = F)
+rda_env2<-as.data.frame(rda_result_env$rdascores$biplot)
+rda_env2$ID=rownames(rda_env2)
+rda_env2=left_join(rda_env2,env_anno)
+
+#VPA
+rda.vpa <- varpart(t(rda_asv), rda_env[,rda_env2$ID],rda_env[,rda_env1$ID], transfo="hel",chisquare = FALSE) 
+v <- rda.vpa$part$indfract$Adj.R.square * 100
+
+circles <- data.frame(x0 = c(0, 1.2),y0 = 0,r  = 1)
+
+labels <- data.frame(
+  x = c(-0.35, 1.55, -0.35, 0.60, 1.55, 0.60),
+  y = c(0.40, 0.40, -0.25, 0, -0.25, -1.25),
+  label = c("Environmental\nresponse","Resource\nutilization",
+            sprintf("%.1f%%", v[1]),sprintf("%.1f%%", v[3]),sprintf("%.1f%%", v[2]),
+            "Unexplained = 32.1%"))
+
+fig2d <- ggplot() +
+  geom_circle(data = circles,aes(x0 = x0, y0 = y0, r = r),
+              fill = "grey80",colour = "grey50",alpha = 0.7,linewidth = 0.7) +
+  geom_text(data = labels,aes(x, y, label = label), size = 4.5) +
+  coord_fixed( xlim = c(-1.1, 2.3),ylim = c(-1.45, 1.1)) +
+  theme_void()
+ggsave(paste0(output_dir, "fig2D.pdf", sep=""), fig2d, width = 5, height = 4)
+fig2d
+```
+
+
+
+## E. Elastic net
+
+(E) Key strain traits associated with community disturbance (Bray-Curtis distance to CK) selected via elastic net regression.
+
+```{r key_traits}
+library(glmnet)
+library(ggplot2)
+library(ggpubr)
+library(LorMe)
+library(vegan)
+library(tidyr)
+library(magrittr)
+
+groupfile <- read.delim("../data/groupfile.txt")
+asv_table <- read.delim("../data/asv_table.txt")
+asv_taxonomy <- read.delim("../data/asv_taxonomy.txt")
+phy_metafile <- read.delim("../data/phy_metafile.txt")
+trait_data <- read.delim("../data/trait_data.txt")
+
+asv_object <- tax_summary(groupfile = groupfile,
+                          inputtable = asv_table[,-1],reads = T,
+                          taxonomytable = asv_taxonomy,
+                          outputtax = "standard")
+asv_object2 <- object_config(taxobj =asv_object,
+                             treat_location = 8,
+                             rep_location = 5,
+                             treat_col = c("gray","#ef1828","#ffbc14",
+                                           "#00bdcd","#006b7b"))
+
+adonis_stat=data.frame()
+dis_frame=data.frame()
+for(i in unique(phy_metafile$sampleID)){
+  sub_data=sub_tax_summary(taxobj = asv_object2,strain==i|site=="Water")
+  adonis_result=adonis2(t(sub_data$Genus[,-1])~site,data=sub_data$groupfile)
+  r2=adonis_result$R2[1]
+  p=adonis_result$`Pr(>F)`[1]
+  cluster=phy_metafile$cluster[phy_metafile$sampleID==i]
+  adonis_stat=rbind(adonis_stat,data.frame(strain=i,r2,p,cluster))
+  #
+  ck=grep("CK",sub_data$groupfile$sample_ID)
+  nock=1:11 %>% .[-grep("CK",sub_data$groupfile$sample_ID)]
+  sub_dis_frame=sub_data$Genus %>% .[,-1] %>%
+    t() %>% vegdist() %>% as.matrix() %>% as.data.frame()
+  sub_dis_frame=sub_dis_frame[ck,nock]%>% gather(.,"Pair","value")
+  
+  sub_dis_frame$strain=i
+  sub_dis_frame$cluster=cluster
+  dis_frame=rbind(dis_frame,sub_dis_frame)
+}
+
+disturbance <- dis_frame %>% group_by(strain, cluster) %>%
+  summarise(
+    mean_value = mean(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Cross-validation for selecting the best lambda
+alphas <- seq(0.1, 0.9, by = 0.1)
+results <- data.frame()
+
+set.seed(222)
+for(alpha in alphas){
+  cv_fit <- cv.glmnet(as.matrix(trait_data[,1:51]), 
+                      disturbance$mean_value,
+                      alpha=alpha, nfolds=5,
+                      standardize = F,  # 自动标准化
+                      family = "gaussian")
+  # lambda.min
+  idx_min <- which.min(cv_fit$cvm)
+  # lambda.1se
+  idx_1se <- which(cv_fit$lambda == cv_fit$lambda.1se)
+  results <- rbind(results, data.frame(
+    alpha = alpha,
+    # lambda.1se
+    lambda_1se = cv_fit$lambda.1se,
+    mse_1se = cv_fit$cvm[idx_1se],
+    cvsd_1se = cv_fit$cvsd[idx_1se],
+    nzero_1se = cv_fit$nzero[idx_1se],
+    # lambda.min
+    lambda_min = cv_fit$lambda.min,
+    mse_min = cv_fit$cvm[idx_min],
+    cvsd_min = cv_fit$cvsd[idx_min],
+    nzero_min = cv_fit$nzero[idx_min]
+  ))
+}
+
+# write.table(results,"./best_alpha_lambda.txt",quote = F,sep = "\t",col.names = T,row.names = F)
+best <- results %>% slice_min(mse_min, n = 1, with_ties = FALSE)
+
+final_fit <- glmnet(as.matrix(trait_data[,1:51]),
+                 disturbance$mean_value,
+                 alpha = best$alpha,  
+                 lambda = best$lambda_min,
+                 standardize = F, 
+                 family = "gaussian")
+
+coefficient_df <- as.matrix(coef(final_fit)) %>% as.data.frame() %>%
+  tibble::rownames_to_column("variable") %>%
+  rename(coefficient = s0) %>%
+  filter(variable != "(Intercept)",coefficient != 0) %>%
+  mutate(
+    Direction = if_else(coefficient > 0, "Positive", "Negative"),
+    group = if_else(variable %in% c("maxiumbiomass", "Twiching"),
+      "Environmental response","Resource utilization")) %>%
+  arrange(desc(abs(coefficient)))
+
+fig2e <- ggplot(coefficient_df,
+  aes(x = reorder(variable, -abs(coefficient)),
+      y = coefficient,fill = group)) +
+  geom_col(width = 0.6) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  scale_fill_manual(
+    values = c("Resource utilization" = "lightgray",
+               "Environmental response" = "#686868")) +
+  labs(x = NULL, y = "Coefficient value") +
+  theme_classic2() +
+  theme(
+    axis.text = element_text(size = 6),
+    axis.text.x = element_text(angle = 90),
+    axis.title = element_text(size = 7, face = "bold"),
+    axis.line = element_line(linewidth = 0.3),
+    axis.line.x = element_blank(),
+    axis.ticks = element_line(linewidth = 0.3),
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom",
+    legend.key.size = unit(0.4, "cm"),
+    legend.text = element_text(size = 6)
+  )
+
+ggsave(paste0(output_dir, "fig2E.pdf", sep=""), fig2e, width = 5, height = 4)
+fig2e
+```
+
+
+
+## F. Community assembly
+
+(F) Relative contributions of deterministic processes (homogeneous and variable selection) and stochastic processes to rhizosphere bacterial community assembly following inoculation with different strains/clusters.
+
+```{r assembly}
+library(ggplot2)
+library(magrittr)
+
+phy_metafile <- read.delim("../data/phy_metafile.txt")
+betanti <- read.delim("betanti.txt")
+
+allnti_plot <- table(betanti[,c(14,16)]) %>% as.data.frame() %>% 
+  aggregate(Freq ~ strain + group, data = .,FUN = function(x) (x / sum(.$Freq[.$strain == .$strain[which(.$Freq == x)[1]]])) * 100)
+allnti_plot$cluster <- rep(phy_metafile$cluster,3)
+
+fig2f <- ggplot(allnti_plot,aes(x=strain,y=Freq,fill=group))+
+  geom_col(width = 0.8)+
+  facet_grid(~cluster,scales = "free",space = "free")+
+  scale_fill_manual(values = c("#156077","#f46f20","#ffdf00"))+
+  labs(x="Ralstonia solanacearum strains",y="Ecological processes(%)",fill="")+
+  scale_y_continuous(expand = c(0,0))+
+  theme_minimal()+
+  theme(axis.title = element_text(size = 7,face = "bold"),
+        axis.text.y = element_text(size = 6,color="black"),
+        axis.text.x = element_blank(),
+        axis.line.y = element_line(),
+        axis.ticks.y = element_line(),
+        plot.title = element_text(size=7,face="bold"),
+        legend.text = element_text(size = 6,color="black"),
+        legend.title = element_text(size = 6,face = "bold"),
+        legend.key.size = unit(0.3, 'cm'),
+        legend.position = "bottom")
+ggsave(paste0(output_dir, "fig2F.pdf", sep=""), fig2f, width = 5, height = 3)
+fig2f
+```
+
+
+
+## G. Correlation
+
+(G) Pearson correlation between the relative contribution of deterministic processes (RRdeterministic) and pairwise strain traits distance.
+
+```{r correlation}
+library(ggplot2)
+library(magrittr)
+library(LorMe)
+
+groupfile <- read.delim("../data/groupfile.txt")
+asv_table <- read.delim("../data/asv_table.txt")
+asv_taxonomy <- read.delim("../data/asv_taxonomy.txt")
+trait_data <- read.delim("../data/trait_data.txt")
+
+asv_object <- tax_summary(groupfile = groupfile,
+                          inputtable = asv_table[,-1],reads = T,
+                          taxonomytable = asv_taxonomy,
+                          outputtax = "standard")
+asv_object2 <- object_config(taxobj =asv_object,
+                             treat_location = 8,
+                             rep_location = 5,
+                             treat_col = c("gray","#ef1828","#ffbc14",
+                                           "#00bdcd","#006b7b"))
+
+strain_matrix <- vegdist(trait_data[, 1:51],method = "euclidean") %>%as.matrix()
+dimnames(strain_matrix) <- list(trait_data$sampleID,trait_data$sampleID)
+strain_dist <- as.data.frame(as.table(strain_matrix),responseName = "value") %>%
+  rename(sample1 = Var1, sample2 = Var2) %>%filter(sample1 != sample2)
+
+micro_dist <- t(asv_object2$Genus[, -1]) %>%
+  vegdist(method = "bray") %>%
+  as.matrix() %>% .[-(7:14), -(7:14), drop = FALSE] %>%
+  as.table() %>% as.data.frame(responseName = "value") %>%
+  rename(sample1 = Var1, sample2 = Var2) %>%
+  filter(sample1 != sample2) %>%
+  mutate(name1 = gsub("\\.", "-", substr(sample1, 1, 6)),
+         name2 = gsub("\\.", "-", substr(sample2, 1, 6))) %>%
+  filter(name1 != name2) %>%
+  summarise(value = mean(value),.by = c(name1, name2))
+
+betanti <- read.delim("betanti.txt")
+allnti_plot <- table(betanti[,c(14,16)]) %>% as.data.frame() %>% 
+  aggregate(Freq ~ strain + group, data = .,FUN = function(x) (x / sum(.$Freq[.$strain == .$strain[which(.$Freq == x)[1]]])) * 100)
+
+Deterministic <- data.frame(strain=allnti_plot$strain[1:30],
+                            process='Deterministic',
+                            Freq=allnti_plot$Freq[1:30]+allnti_plot$Freq[61:90])
+
+RRdeterministic <- matrix(nrow=870,ncol=3) %>% as.data.frame()
+
+for (i in 1:870) {
+  a <- log(Deterministic[Deterministic$strain==strain_dist$sample2[i],3]/Deterministic[Deterministic$strain==strain_dist$sample1[i],3])
+  RRdeterministic[i,] <- c(strain_dist$sample1[i],as.character(strain_dist$sample2[i]),a)
+}
+
+
+pairwise_distance <- data.frame(sample1=RRdeterministic$V1,sample2=RRdeterministic$V2,
+                   `stain euclidean`=strain_dist$value,
+                   `micro bray-curtis`=micro_dist$value,
+                   RRdeterministic=as.numeric(RRdeterministic$V3))
+pairwise_distance1 <- pairwise_distance[pairwise_distance$RRdeterministic>0,]
+# write.table(pairwise_distance1,"pairwise_distance.txt",quote = F,sep = "\t",row.names = F,col.names = T)
+
+cor_result <- cor.test(pairwise_distance1$`stain.euclidean`,pairwise_distance1$RRdeterministic,method = "pearson")
+
+fig2g <-ggplot(pairwise_distance1,aes(x=`stain.euclidean`,y=RRdeterministic))+
+  geom_point(shape=21,alpha=0.5,fill="#cacaca",color="#a9a9a9",size=0.7)+
+  geom_smooth(method = "lm",color="#515151",linewidth=0.5)+
+  labs(x="Strain trait differences",y="RRdeterministic")+
+  theme_classic()+
+  annotate("text",x = 1.6,y=2,label = paste0(
+    "r == ",round(unname(cor_result$estimate), 2),"*','~~italic(p) < 0.001"),
+    parse = TRUE,size=2)+
+  theme(axis.title = element_text(size = 7,face = "bold"),
+        axis.text = element_text(size = 6,color="black"),
+        axis.line = element_line(linewidth = 0.3),
+        axis.ticks = element_line(linewidth = 0.3),
+        plot.title = element_text(size=7,face="bold"),
+        legend.text = element_text(size = 6,color="black"),
+        legend.title = element_text(size = 6,face = "bold"),
+        legend.key.size = unit(0.5, 'cm'),
+        legend.position = "none")
+ggsave(paste0(output_dir, "fig2G.pdf", sep=""), fig2g, width = 2.5, height = 2)
+fig2g
+```
+
+
+
+## H. Interval correlation
+
+(H) Pearson correlation between RRdeterministic and Bray-Curtis microbial community dissimilarity with increasing trait dissimilarity of the invader strains.
+
+```{r interval}
+library(ggplot2)
+library(magrittr)
+
+pairwise_distance <- read.delim("pairwise_distance.txt")
+
+pairwise_distance_result <- seq(1.7,max(pairwise_distance$stain.euclidean, na.rm = TRUE),by = 0.01) |>
+  sapply(function(threshold) {
+    dat <- subset(pairwise_distance,stain.euclidean < threshold)
+    test <- cor.test(dat$RRdeterministic,dat$micro.bray.curtis,method = "pearson")
+    c(threshold = threshold,
+      deterministic_VS_bray = unname(test$estimate),
+      pvalue = test$p.value)}) |>t() |>as.data.frame()
+
+pairwise_distance_result$p.adj <- p.adjust(pairwise_distance_result$pvalue, method = "BH")
+
+fig2h <- ggplot(pairwise_distance_result,aes(x=threshold,y=deterministic_VS_bray))+
+  geom_point(size=0.5,shape=19,color="#a9a9a9")+
+  labs(x="Trait distance thresholds",y="Correlation coefficient\n(RR deterministic - BC dissimilarity)")+
+  theme_classic()+
+  theme(axis.title = element_text(size = 7,face = "bold"),
+        axis.text = element_text(size = 6,color="black"),
+        axis.line = element_line(linewidth = 0.3),
+        axis.ticks = element_line(linewidth = 0.3),
+        plot.title = element_text(size=7,face="bold"),
+        legend.text = element_text(size = 6,color="black"),
+        legend.title = element_text(size = 6,face = "bold"),
+        legend.key.size = unit(0.5, 'cm'),
+        legend.position = "none")
+ggsave(paste0(output_dir, "fig2H.pdf", sep=""), fig2h, width = 2.5, height = 2)
+fig2h
+```

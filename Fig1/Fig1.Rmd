@@ -1,0 +1,118 @@
+---
+title: "Figure 1 Meta-analysis reveals variable impacts of phytopathogen invasions on resident microbiota."
+author: "Yarong Li & Ningqi Wang"
+date: "2026-10-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Clean workspace
+rm(list=ls()) 
+# Set output directory
+output_dir="./"
+```
+
+## A. Hypothetical illustration
+
+A)  Illustration of the hypothesized drivers of resident community shifts induced by intraspecific invader variation.
+
+This figure was created with BioRender. Jiang, G. (2026) <https://BioRender.com/3zdhh6i>.
+
+![image](Fig1A.png)
+
+## B. Distribution of observations
+
+（B）Geographic distribution of paired observations included in the meta-analysis. The map was based on the standard map No. GS(2021)648 and Antarctica is not shown.
+
+```{r geomap, echo=TRUE}
+library(sf)
+library(ggplot2)
+library(vroom)
+library(dplyr)
+world_map <- st_read(
+  "./word-map.shp",quiet = TRUE) %>% 
+  filter(NAME != "Antarctica")
+
+map_data <- vroom("map.csv")
+map_data$group <- factor(map_data$group,
+                         levels = c("Rastonia solanacearum","Fusarium oxysporum","Meloidogyne"))
+map_sf <- st_as_sf(
+  map_data,coords = c("longitude", "latitude"),
+  crs = 4326,remove = FALSE)
+
+
+fig1b = ggplot() +
+  geom_sf(data = world_map,fill = "#dcd8c7",
+          colour = "white",linewidth = 0.1)+
+  geom_sf(data = map_sf,
+          aes(fill = group),colour = "black",
+          size = 1,pch=21)+
+  scale_x_continuous(breaks = seq(-180, 200, 45), labels = function(x){paste0(x, "°")},limits = c(-180,200)) +
+  scale_y_continuous(breaks = seq(-60, 100, 30), labels = function(x){paste0(x, "°")}) +
+  scale_fill_manual(values = c("#ffd401","#00b0eb","#e20612"))+
+  labs(fill="")+
+  theme_classic() +
+  theme(axis.title = element_blank(),axis.text = element_blank(),
+        axis.line = element_blank(),axis.ticks = element_blank(),
+        legend.position = c(0.15,0.3))
+
+ggsave(paste0(output_dir, "fig1B.pdf", sep=""), fig1b, width = 9, height = 5)
+fig1b
+```
+
+## C. Meta-analysis
+
+（C）Forest plot displaying the impact of microbial invasion on the resident community for the three pathogen species included in the meta-analysis.
+
+```{r meta}
+library(metafor)
+library(magrittr)
+library(ggplot2)
+library(wesanderson)
+
+meta_data <- read.delim("../data/meta_data.txt")
+
+Response_ratio <- matrix(nrow = 9,ncol = 9) %>% as.data.frame()
+colnames(Response_ratio) <- c("Disease","Index","effect","lower","upper","meta.p","hetero","het.p","group")
+row_id <- 1
+
+for(i in c("Bacteria","Fungi","Nematode")) {
+      for(j in c("alpha","structure","beta" )){
+        dat <- meta_data[meta_data$Disease==i & meta_data$Index==j,]
+        dat <- escalc(measure = "ROM",
+                      m1i = mean.c, sd1i = sd.c, n1i = n.c,
+                      m2i = mean.e, sd2i = sd.e, n2i = n.e,data = dat)
+        model <- rma(yi = yi,vi = vi,data = dat,method = "REML")
+        Response_ratio[row_id, ] <- data.frame( Disease = i,Index = j,
+                                                effect = as.numeric(coef(model)),
+                                                lower = model$ci.lb,upper = model$ci.ub,
+                                                meta.p = model$pval,
+                                                hetero = model$I2,het.p = model$QEp,group = paste(i, j, sep = "_"))
+        row_id <- row_id + 1
+      }
+}
+
+Response_ratio$group <- factor(Response_ratio$group,
+                               levels = rev(c("Bacteria_alpha","Bacteria_beta","Bacteria_structure",
+                                          "Fungi_alpha","Fungi_beta","Fungi_structure",
+                                          "Nematode_alpha","Nematode_beta","Nematode_structure")))
+
+fig1c <- ggplot(Response_ratio)+
+  annotate("rect",xmin = -1, xmax = 3, ymin = 9.5, ymax = 6.5,fill="#e2061210")+
+  annotate("rect",xmin = -1, xmax = 3, ymin = 6.5, ymax = 3.5,fill="#ffd40110")+
+  annotate("rect",xmin = -1, xmax = 3, ymin = 0.5, ymax = 3.5,fill="#00b0eb10")+
+  geom_vline(aes(xintercept=0),lty=2,linewidth=.5,color="gray")+
+  geom_errorbar(data=Response_ratio,aes(x=effect,y=group,xmax=upper,xmin=lower,color=Index),width=0)+
+  geom_point(data=Response_ratio,aes(y=group,x=effect,color=Index),size=2.5)+
+  scale_y_discrete(labels=rep(c("Community structure","Beta diversity","Alpha diversity"),3))+
+  scale_x_continuous(limits = c(-1,3))+
+  theme_classic()+
+  scale_color_manual(values =  wes_palette(n=3, name="GrandBudapest2"))+
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "none")+
+  labs(x="Response ratio (log)",y="")
+ggsave(paste0(output_dir, "fig1C.pdf", sep=""), fig1c, width = 4, height = 4)
+fig1c
+```
