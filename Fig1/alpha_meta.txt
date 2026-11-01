@@ -1,0 +1,26 @@
+ID	Disease	Index	n.e	mean.e	sd.e	n.c	mean.c	sd.c
+Study1	Bacteria	alpha						
+Study2	Bacteria	alpha	3	6.64	0.103923048	3	6.51	0.173205081
+Study3	Bacteria	alpha	10	6.602	0.211702097	40	7.148	0.324062356
+Study4	Bacteria	alpha	6	2.9	0.35	6	3.73	0.34
+Study5	Bacteria	alpha						
+Study6	Bacteria	alpha	10	4.395	0.448534651	10	4.46	0.72952039
+Study7	Bacteria	alpha	9	5.506666667	0.270693554	9	5.523333333	0.318001572
+Study8	Bacteria	alpha	50	6.4028	0.323905	50	6.4042	0.235658781
+Study9	Bacteria	alpha	6	2.79	0.710352025	6	7.02	0.636867333
+Study10	Bacteria	alpha	12	6.913	0.56872274	12	6.571	0.420567077
+Study11	Bacteria	alpha	9	6.3	0.72	9	6.46	0.66
+Study12	Bacteria	alpha	6	4.91	0.27	6	5.11	0.1
+Study13	Bacteria	alpha	12	5.34	0.22	12	5.46	0.13
+Study14	Bacteria	alpha	8	4.87	0.4	8	6.37	0.11
+Study15	Fungi	alpha	9	3.531	1.623413764	9	5.906666667	0.451608237
+Study16	Fungi	alpha	5	3.53	0.851260503	10	3.96	0.406721308
+Study17	Fungi	alpha	6	0.93	0.441406842	6	1.896666667	0.330676075
+Study18	Fungi	alpha	4	105.6	61.6	4	166.5	86
+Study19	Fungi	alpha	6	4.87	3.069801297	6	4.72	0.034058773
+Study20	Nematode	alpha	3	7.44	0.087177979	3	7.25	0.202237484
+Study21	Nematode	alpha	3	9.93	0.44	3	10.09	0.29
+Study22	Nematode	alpha	5	5.286	0.812976014	5	4.24	1.66004518
+Study23	Nematode	alpha	3	6.19	0.12	3	6.24	0.09
+Study24	Nematode	alpha	39	9.145384615	0.617481498	39	9.005641026	0.668158486
+Study25	Nematode	alpha	16	4.03	0.356426711	16	4.045	0.216086402
